@@ -1,0 +1,68 @@
+sso-proxy:
+  port: 9900
+  bindAddress: 0.0.0.0
+  sessionSetting:
+    maxAge: 1800  # seconds, session idle timeout
+  oidcClients:
+    - realm: master
+      clientId: sso-proxy  # client created in master realm and has service account enabled
+      secret: eUGbBI99r9P3kg8bIVcykq7YMnU741JG
+      issuer: http://localhost:8080/realms/master
+      redirectUrl: http://localhost:9900/auth/callback
+      scopes:
+        - openid
+        - profile
+        - email
+
+    - realm: jeven
+      clientId: sso-proxy  # client created in master realm, just a normal client
+      secret: EfAmZz6JnU1XFm94PcV3uxC47mcVpx2F
+      issuer: http://localhost:8080/realms/jeven
+      redirectUrl: http://localhost:9900/auth/callback
+      scopes:
+        - openid
+        - profile
+        - email
+
+  authenticators:
+    - type: keycloak
+      name: keycloak-authenticator
+      url: http://localhost:8080
+
+  apps:
+    - appId: cloud-portal
+      loginPage: http://localhost:8088/login
+      homePage: http://localhost:8088/home
+      grantType: authorization_code
+
+  reverseProxy:
+    urlPrefix: /api
+    httpTransport:
+      timeout: 10  # seconds
+      keepAlive: 20 # seconds
+      maxIdleConnections: 100 # seconds
+      idleConnectionTimeout: 20 # seconds
+      tls:
+        handShakeTimeout: 10 # seconds
+        expectContinueTimeout: 1 # seconds
+        insecureSkipVerify: true
+
+    routes:
+      # request path: /api/iam/**
+      - serviceName: iam
+        url: http://localhost:9999/ # the url of backend service
+        filters:
+          #https://github.com/spf13/viper/issues/1014
+          #viper将下列key序列化成map时，key会全部为小写
+          - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
+
+  enableDevFeatures: false
+  logSetting:
+    logLevel: INFO
+    logPath: /var/log/sso-proxy
+    outputToConsole: true
+    fileName: sso-proxy.log
+    maxSizeInMB: 30
+    maxAgeInDay: 30
+    maxBackups: 10
+    compress: true
