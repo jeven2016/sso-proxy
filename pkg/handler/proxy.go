@@ -35,6 +35,10 @@ func Proxy(c *gin.Context) {
 		return
 	}
 
+	forwardRequest(c, serviceRoute, proxySetting)
+}
+
+func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting model.ReverseProxy) {
 	parsedUrl, err := url.Parse(serviceRoute.Url)
 	if err != nil {
 		utils.Log().Warn("invalid reverseProxy.routes.route.url", zap.String("url", serviceRoute.Url),
@@ -68,7 +72,7 @@ func Proxy(c *gin.Context) {
 		req.URL.Scheme = parsedUrl.Scheme
 		req.URL.Host = parsedUrl.Host
 		req.URL.Path = c.Param("proxyPath")
-		handleFilters(req, serviceRoute.Filters)
+		handleFilters(req, serviceRoute.Filters, c)
 	}
 
 	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, err error) {
@@ -82,10 +86,12 @@ func Proxy(c *gin.Context) {
 }
 
 // 处理过滤器
-func handleFilters(req *http.Request, filters map[string]string) {
+func handleFilters(req *http.Request, filters map[string]string, c *gin.Context) {
 	for key, value := range filters {
 		if filter := proxyfilters.GetFilter(key); filter != nil {
-			filter(req, nil, value)
+			if len(value) > 0 {
+				filter(req, nil, c, value)
+			}
 		}
 	}
 }

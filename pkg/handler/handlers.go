@@ -46,9 +46,9 @@ func HandleAuthCode(c *gin.Context) {
 	maxAge := utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge
 
 	// 设置临时cookie
-	utils.SetCookie(c, utils.COOKIE_REALM_PARAM, realm, maxAge)
-	utils.SetCookie(c, utils.COOKIE_STATE_PARAM, state, maxAge)
-	utils.SetCookie(c, utils.COOKIE_NONCE_PARAM, nonce, maxAge)
+	utils.SetCookie(c, utils.CookieRealmParam, realm, maxAge)
+	utils.SetCookie(c, utils.CookieStateParam, state, maxAge)
+	utils.SetCookie(c, utils.CookieNonceParam, nonce, maxAge)
 
 	c.Redirect(http.StatusFound, authCfg.Oauth2Config.AuthCodeURL(state, oidc.Nonce(nonce)))
 }
@@ -58,16 +58,16 @@ func HandleToken(c *gin.Context) {
 	var realm string
 	var nonce string
 	var err error
-	if state, err = getCookie(c, utils.COOKIE_STATE_PARAM); err != nil {
+	if state, err = getCookie(c, utils.CookieStateParam); err != nil {
 		utils.RedirectLogin(c)
 		return
 	}
-	if realm, err = getCookie(c, utils.COOKIE_REALM_PARAM); err != nil {
+	if realm, err = getCookie(c, utils.CookieRealmParam); err != nil {
 		utils.RedirectLogin(c)
 		return
 	}
 
-	if nonce, err = getCookie(c, utils.COOKIE_NONCE_PARAM); err != nil {
+	if nonce, err = getCookie(c, utils.CookieNonceParam); err != nil {
 		utils.RedirectLogin(c)
 		return
 	}
@@ -106,18 +106,18 @@ func HandleToken(c *gin.Context) {
 	}
 
 	// 清理cookie
-	utils.SetCookie(c, utils.COOKIE_REALM_PARAM, realm, -1)
-	utils.SetCookie(c, utils.COOKIE_STATE_PARAM, state, -1)
-	utils.SetCookie(c, utils.COOKIE_NONCE_PARAM, "", -1)
+	utils.SetCookie(c, utils.CookieRealmParam, realm, -1)
+	utils.SetCookie(c, utils.CookieStateParam, state, -1)
+	utils.SetCookie(c, utils.CookieNonceParam, "", -1)
 
 	// utils.SetCookie(c, utils.COOKIE_TOKEN_PARAM, oauth2Token.AccessToken,
 	// 	utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge)
 
 	// 保存Session
 	session := sessions.Default(c)
-	session.Set(utils.OAUTH2_TOKEN, oauth2Token)
-	session.Set(utils.OAUTH2_RAW_ID_TOKEN, rawIdToken)
-	session.Set(utils.REALM_PARAM, realm)
+	session.Set(utils.Oauth2Token, oauth2Token)
+	session.Set(utils.Oauth2RawIdToken, rawIdToken)
+	session.Set(utils.RealmParam, realm)
 	err = session.Save()
 
 	if err != nil {
@@ -131,8 +131,8 @@ func HandleToken(c *gin.Context) {
 
 func GetUserInfo(c *gin.Context) {
 	session := sessions.Default(c)
-	oauth2Token := session.Get(utils.OAUTH2_TOKEN).(oauth2.Token)
-	realm := session.Get(utils.REALM_PARAM).(string)
+	oauth2Token := session.Get(utils.Oauth2Token).(oauth2.Token)
+	realm := session.Get(utils.RealmParam).(string)
 	userInfo, err := utils.GetByRealm(realm).Provider.UserInfo(context.Background(), oauth2.StaticTokenSource(&oauth2Token))
 	if err != nil {
 		c.String(http.StatusUnauthorized, "%v", err.Error())
@@ -147,6 +147,9 @@ func GetUserInfo(c *gin.Context) {
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
+	if err := session.Save(); err != nil {
+		utils.Log().Error("failed to save session", zap.Error(err))
+	}
 	c.Status(http.StatusOK)
 }
 

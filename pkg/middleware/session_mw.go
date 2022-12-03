@@ -28,7 +28,7 @@ func CheckSession() gin.HandlerFunc {
 		}
 
 		session := sessions.Default(c)
-		oauth2Token := session.Get("oauth2Token")
+		oauth2Token := session.Get(utils.Oauth2Token)
 
 		// session中没有token(视为refresh_token失效时间到达),跳转登录页面
 		if oauth2Token == nil {
@@ -41,12 +41,12 @@ func CheckSession() gin.HandlerFunc {
 		}
 
 		rawToken := oauth2Token.(oauth2.Token)
-		realm := session.Get(utils.REALM_PARAM).(string)
+		realm := session.Get(utils.RealmParam).(string)
 		authCfg := utils.GetByRealm(realm)
 
 		// token处于有效期，校验token是否真实
 		if rawToken.Valid() {
-			idToken := session.Get(utils.OAUTH2_RAW_ID_TOKEN).(string)
+			idToken := session.Get(utils.Oauth2RawIdToken).(string)
 			verifiedIdToken, err := authCfg.Verifier.Verify(context.Background(), idToken)
 			if err != nil {
 				utils.Log().Error("Invalid id token", zap.Any("idToken", verifiedIdToken))
@@ -71,7 +71,7 @@ func CheckSession() gin.HandlerFunc {
 			ts := authCfg.Oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: oldRefreshToken})
 			rawToken, err := ts.Token()
 			if err != nil {
-				utils.Log().Error("Failed to refresh token", zap.Error(err), zap.String(utils.REALM_PARAM, realm))
+				utils.Log().Error("Failed to refresh token", zap.Error(err), zap.String(utils.RealmParam, realm))
 				if utils.IsRestApi(uri) {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
@@ -80,7 +80,7 @@ func CheckSession() gin.HandlerFunc {
 				return
 			}
 			utils.Log().Info("token refreshed", zap.String("old refresh token", oldRefreshToken))
-			session.Set(utils.OAUTH2_TOKEN, *rawToken)
+			session.Set(utils.Oauth2Token, *rawToken)
 			c.Next()
 		}
 	}

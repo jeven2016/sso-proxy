@@ -1,24 +1,37 @@
 package utils
 
 const (
-	REALM_PARAM         = "realm"
-	OAUTH2_TOKEN        = "oauth2Token"
-	OAUTH2_RAW_ID_TOKEN = "rawIdToken"
-	SESSION_USER_INFO   = "userInfo"
+	RealmParam       = "realm"
+	Oauth2Token      = "oauth2Token"
+	Oauth2RawIdToken = "rawIdToken"
 
-	COOKIE_REALM_PARAM = "realm"
-	COOKIE_STATE_PARAM = "state"
-	COOKIE_NONCE_PARAM = "nonce"
-	COOKIE_TOKEN_PARAM = "token"
+	CookieRealmParam = "realm"
+	CookieStateParam = "state"
+	CookieNonceParam = "nonce"
 )
 
 const (
-	URL_SEPERATOR = "/"
-	SPACE         = " "
+	SPACE        = " "
+	UrlSeparator = "/"
 )
 
 const (
-	// FILTER_SET_HEADER https://github.com/spf13/viper/issues/1014
+	// FilterSetHeader https://github.com/spf13/viper/issues/1014
 	// viper将下列key序列化成map时，key会全部为小写, 故这里的key全部使用小写进行规避
-	FILTER_SET_HEADER = "setheader"
+	FilterSetHeader      = "setheader"
+	FilterSetBearerToken = "setbearertoken"
+
+	HeaderAuthorization = "Authorization"
+	HeaderHost          = "Host"
+)
+
+const (
+	ValueIamAccesstoken = "iam.accessToken"
+)
+
+const (
+	IamMasterRealm   = "master"
+	AuthRealm        = "realms"
+	AuthAdminRealms  = "admin/realms"
+	IssueProviderUri = "/protocol/openid-connect"
 )

@@ -23,22 +23,35 @@ type SessionSetting struct {
 
 // SsoProxyConfig SSO统一配置
 type SsoProxyConfig struct {
-	Port              int             `mapstructure:"port"`
-	BindAddress       string          `mapstructure:"bindAddress"`
-	SessionSetting    SessionSetting  `mapstructure:"sessionSetting"`
-	OidcClients       []Client        `mapstructure:"oidcClients"`
-	EnableDevFeatures bool            `mapstructure:"enableDevFeatures"`
-	Authenticators    []Authenticator `mapstructure:"authenticators"`
-	Apps              []App           `mapstructure:"apps"`
-	ReverseProxy      ReverseProxy    `mapstructure:"reverseProxy"`
-	LogSetting        LogSetting      `mapstructure:"logSetting"`
+	Port                int             `mapstructure:"port"`
+	BindAddress         string          `mapstructure:"bindAddress"`
+	SessionSetting      SessionSetting  `mapstructure:"sessionSetting"`
+	OidcAuthCallbackUrl string          `mapstructure:"oidcAuthCallbackUrl"`
+	OidcScopes          []string        `mapstructure:"oidcScopes"`
+	OidcClients         []Client        `mapstructure:"oidcClients"`
+	EnableDevFeatures   bool            `mapstructure:"enableDevFeatures"`
+	Authenticators      []Authenticator `mapstructure:"authenticators"`
+	Apps                []App           `mapstructure:"apps"`
+	ReverseProxy        ReverseProxy    `mapstructure:"reverseProxy"`
+	LogSetting          LogSetting      `mapstructure:"logSetting"`
 }
 
-// Authenticator 校验器
+type PageParam struct {
+	First int `mapstructure:"first"`
+	Max   int `mapstructure:"max"`
+}
+
+type SyncClients struct {
+	EnabledOnStartup bool      `mapstructure:"enabledOnStartup"`
+	PageParam        PageParam `mapstructure:"pageParam"`
+}
+
+// Authenticator 校验器, 当前只支持keycloak
 type Authenticator struct {
-	Type string `mapstructure:"type"`
-	Name string `mapstructure:"name"`
-	Url  string `mapstructure:"url"`
+	Type        string      `mapstructure:"type"`
+	Name        string      `mapstructure:"name"`
+	Url         string      `mapstructure:"url"`
+	SyncClients SyncClients `mapstructure:"syncClients"`
 }
 
 // App 对接的应用
@@ -50,12 +63,10 @@ type App struct {
 }
 
 type Client struct {
-	Realm       string   `mapstructure:"realm"`
-	ClientId    string   `mapstructure:"clientId"`
-	Secret      string   `mapstructure:"secret"`
-	Issuer      string   `mapstructure:"issuer"`
-	RedirectUrl string   `mapstructure:"redirectUrl"`
-	Scopes      []string `mapstructure:"scopes"`
+	Realm             string `mapstructure:"realm"`
+	ClientId          string `mapstructure:"clientId"`
+	Secret            string `mapstructure:"secret"`
+	ProviderUrlPrefix string `mapstructure:"providerUrlPrefix"`
 }
 
 type Route struct {

@@ -72,6 +72,9 @@ func start(cmd *cobra.Command) {
 		// 初始化web服务
 		server := startup.InitWebServer()
 
+		// 同步已有的client
+		startup.SyncClients()
+
 		// 绑定地址，启动
 		bindAddr := fmt.Sprintf("%v:%v", cfg.SsoProxyConfig.BindAddress, cfg.SsoProxyConfig.Port)
 		if err := server.Run(bindAddr); err != nil {

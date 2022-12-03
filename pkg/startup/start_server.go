@@ -42,6 +42,11 @@ func InitWebServer() *gin.Engine {
 		return
 	})
 
+	engine.Any("/admin/*path", func(c *gin.Context) {
+		c.JSON(200, gin.H{"code": 200})
+		return
+	})
+
 	// refresh token
 	// ts := oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: ""})
 	// tok, err := ts.Token()

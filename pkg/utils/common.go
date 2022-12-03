@@ -24,6 +24,10 @@ func GetApp() *model.App {
 	return &GetConfig().SsoProxyConfig.Apps[0]
 }
 
+func GetAuthenticator() *model.Authenticator {
+	return &GetConfig().SsoProxyConfig.Authenticators[0]
+}
+
 func RedirectLogin(c *gin.Context) {
 	c.Redirect(302, GetApp().LoginPage)
 }

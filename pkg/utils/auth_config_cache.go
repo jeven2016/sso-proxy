@@ -45,7 +45,7 @@ func GetByRealm(realm string) *model.AuthConfig {
 		}
 
 		if client != nil {
-			provider, err := oidc.NewProvider(context.Background(), client.Issuer)
+			provider, err := oidc.NewProvider(context.Background(), client.ProviderUrlPrefix)
 			if err != nil {
 				Log().Error("Failed to initialize oidc client", zap.Error(err))
 				return nil
@@ -57,13 +57,13 @@ func GetByRealm(realm string) *model.AuthConfig {
 			oauth2Config := &oauth2.Config{
 				ClientID:     client.ClientId,
 				ClientSecret: client.Secret,
-				RedirectURL:  client.RedirectUrl, // redirect url for generating token by code
+				RedirectURL:  GetConfig().SsoProxyConfig.OidcAuthCallbackUrl, // redirect url for generating token by code
 
 				// Discovery returns the OAuth2 endpoints.
 				Endpoint: provider.Endpoint(),
 
 				// "openid" is a required scope for OpenID Connect flows.
-				Scopes: client.Scopes,
+				Scopes: GetConfig().SsoProxyConfig.OidcScopes,
 			}
 
 			authCfg = &model.AuthConfig{Verifier: verifier, Oauth2Config: oauth2Config, Provider: provider}

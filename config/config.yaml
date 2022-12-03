@@ -3,31 +3,27 @@ sso-proxy:
   bindAddress: 0.0.0.0
   sessionSetting:
     maxAge: 1800  # seconds, session idle timeout
+  oidcAuthCallbackUrl: http://localhost:9900/auth/callback
+  oidcScopes:
+    - openid
+    - profile
+    - email
   oidcClients:
     - realm: master
       clientId: sso-proxy  # client created in master realm and has service account enabled
       secret: eUGbBI99r9P3kg8bIVcykq7YMnU741JG
-      issuer: http://localhost:8080/realms/master
-      redirectUrl: http://localhost:9900/auth/callback
-      scopes:
-        - openid
-        - profile
-        - email
-
-    - realm: jeven
-      clientId: sso-proxy  # client created in master realm, just a normal client
-      secret: EfAmZz6JnU1XFm94PcV3uxC47mcVpx2F
-      issuer: http://localhost:8080/realms/jeven
-      redirectUrl: http://localhost:9900/auth/callback
-      scopes:
-        - openid
-        - profile
-        - email
+      providerUrlPrefix: http://localhost:8080/realms/master
 
   authenticators:
     - type: keycloak
       name: keycloak-authenticator
       url: http://localhost:8080
+      syncClients:
+        enabledOnStartup: true
+        autoRegister: false #todo: 如果realm下没有sso-proxy,则是否自动注册
+        pageParam: #分页查询的参数设置, first, max
+          first: 0
+          max: 100
 
   apps:
     - appId: cloud-portal
@@ -48,13 +44,23 @@ sso-proxy:
         insecureSkipVerify: true
 
     routes:
-      # request path: /api/iam/**
+      # request path: /proxy/iam/**
       - serviceName: iam
-        url: http://localhost:9999/ # the url of backend service
+        url: http://localhost:8080/ # the url of backend service
+        mirrorRequest:
+          enabled: true
+        #          forwardTo: http://www.baidu.com
         filters:
           #https://github.com/spf13/viper/issues/1014
           #viper将下列key序列化成map时，key会全部为小写
           - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
+          - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
+
+      - serviceName: echoTest
+        url: http://localhost:9900/ # the url of backend service
+        filters:
+          - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
+          - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
 
   enableDevFeatures: false
   logSetting:
