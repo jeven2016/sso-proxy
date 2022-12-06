@@ -23,9 +23,8 @@ const (
 	// viper将下列key序列化成map时，key会全部为小写, 故这里的key全部使用小写进行规避
 	FilterSetHeader      = "setheader"
 	FilterSetBearerToken = "setbearertoken"
-
-	HeaderAuthorization = "Authorization"
-	HeaderHost          = "Host"
+	HeaderAuthorization  = "Authorization"
+	HeaderHost           = "Host"
 )
 
 const (

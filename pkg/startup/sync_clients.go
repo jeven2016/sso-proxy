@@ -2,6 +2,7 @@ package startup
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -52,7 +53,10 @@ func SyncClients() {
 		syncRealmClients(masterClient, context.Background(),
 			token, realmRepresentation.Realm, authenticator)
 	}
-	utils.Log().Info("Completed looking for registered clients(sso-proxy)")
+	msg := fmt.Sprintf("Completed looking for registered clients(sso-proxy), %v sso-proxy clients in %v realms",
+		len(utils.GetConfig().SsoProxyConfig.OidcClients),
+		len(results))
+	utils.Log().Info(msg)
 }
 
 func getServiceAccountToken(masterClient *gocloak.GoCloak, masterClientCfg *model.Client) (*gocloak.JWT, error) {
@@ -69,10 +73,9 @@ func getServiceAccountToken(masterClient *gocloak.GoCloak, masterClientCfg *mode
 func logInitError(masterClientCfg *model.Client, err error) {
 	// 在日志中隐藏真实的secret，只提示是否为空
 	var secretDesc = "[Blank]"
-	// if len(masterClientCfg.Secret) > 0 {
-	// 	secretDesc = "[Not Blank]"
-	// }
-	secretDesc = masterClientCfg.Secret
+	if len(masterClientCfg.Secret) > 0 {
+		secretDesc = "[Not Blank]"
+	}
 
 	utils.Log().Error("Failed to generate a token for service account", zap.Error(err), zap.String("realm", "master"),
 		zap.String("clientId", masterClientCfg.ClientId), zap.String("secret", secretDesc),

@@ -83,6 +83,7 @@ func HandleToken(c *gin.Context) {
 		return
 	}
 
+	utils.Log().Info("generate a accessToken", zap.String("accessToken", oauth2Token.AccessToken))
 	rawIdToken, ok := oauth2Token.Extra("id_token").(string)
 	if !ok {
 		utils.Log().Warn("No id_token field in oauth2 token", zap.Any("rawIdToken", rawIdToken))

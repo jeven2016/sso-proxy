@@ -35,6 +35,10 @@ func Proxy(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, errors.New("no valid route found"))
 		return
 	}
+	if serviceRoute.MirroringRequest {
+		// Mirroring HTTP requests
+
+	}
 
 	forwardRequest(c, serviceRoute, proxySetting)
 }
@@ -71,6 +75,7 @@ func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting mode
 		req.Method = c.Request.Method
 		req.Header = c.Request.Header
 		req.URL.Scheme = parsedUrl.Scheme
+		req.Host = parsedUrl.Host
 		req.URL.Host = parsedUrl.Host
 		req.URL.Path = c.Param("proxyPath")
 		handleFilters(req, serviceRoute.Filters, c)

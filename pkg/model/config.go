@@ -86,10 +86,11 @@ type Client struct {
 }
 
 type Route struct {
-	ServiceName string            `mapstructure:"serviceName"`
-	Url         string            `mapstructure:"url"`
-	PublicUris  []string          `mapstructure:"publicUris"`
-	Filters     map[string]string `mapstructure:"filters"`
+	ServiceName      string            `mapstructure:"serviceName"`
+	Url              string            `mapstructure:"url"`
+	MirroringRequest bool              `mapstructure:"mirroringRequest"`
+	PublicUris       []string          `mapstructure:"publicUris"`
+	Filters          map[string]string `mapstructure:"filters"`
 }
 
 type Tls struct {

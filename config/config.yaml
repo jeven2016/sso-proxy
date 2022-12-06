@@ -31,7 +31,7 @@ sso-proxy:
           clientId: sso-proxy
           name: sso-proxy
           generateSecret: true
-          #          secret: test  #将generateSecret设置为false， 可以手段设置secret
+          # secret: test  #将generateSecret设置为false， 可以手段设置secret
           enabled: true
           standardFlowEnabled: true
           serviceAccountsEnabled: false
@@ -65,18 +65,10 @@ sso-proxy:
     routes:
       # request path: /proxy/iam/**, 格式：${reverseProxy.urlPrefix}/${routes.serviceName}
       - serviceName: iam
-        url: http://localhost:8088/login # the url of backend service
-        mirrorRequest:
-          enabled: false
-        # forwardTo: http://www.baidu.com
+        url: http://localhost:8080 # the url of backend service
+        mirroringRequest: true #是否将请求复制到/mirror endpoint去打印完整的请求对象
         publicUris: # 未经登录就可以调用的uri
           - "**/realms/**/departments-resources/**"
-        filters:
-          - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
-          - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
-
-      - serviceName: echoTest
-        url: http://localhost:9900/ # the url of backend service
         filters:
           - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
           - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
