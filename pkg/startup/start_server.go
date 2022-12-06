@@ -2,6 +2,7 @@ package startup
 
 import (
 	"encoding/gob"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -30,22 +31,11 @@ func InitWebServer() *gin.Engine {
 	})
 
 	var engine = gin.Default()
-	engine.Use(sessions.Sessions("session", store))
+	engine.Use(sessions.Sessions("SSO-PROXY", store))
 	engine.Use(middleware.CheckSession(),
 		middleware.GinLogger(),
 		middleware.GinRecovery(utils.GetConfig().SsoProxyConfig.EnableDevFeatures))
-
 	gin.SetMode(gin.ReleaseMode)
-
-	engine.GET("/", func(c *gin.Context) {
-		utils.RedirectHome(c)
-		return
-	})
-
-	engine.Any("/admin/*path", func(c *gin.Context) {
-		c.JSON(200, gin.H{"code": 200})
-		return
-	})
 
 	// refresh token
 	// ts := oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: ""})
@@ -56,13 +46,15 @@ func InitWebServer() *gin.Engine {
 	engine.GET("/auth/callback", handler.HandleToken)
 
 	engine.GET("/auth/userinfo", handler.GetUserInfo)
-	engine.POST("/auth/logout", handler.Logout)
+	engine.GET("/auth/logout", handler.Logout)
 
 	// 该服务内部提供的功能接口
 	engine.GET("/internal/clients", handler.GetAllClients)
 
 	// 需要代理的请求
-	engine.Any("/proxy/:serviceName/*proxyPath", handler.Proxy)
+	proxyUri := strings.TrimRight(utils.GetConfig().SsoProxyConfig.ReverseProxy.UrlPrefix, utils.UrlSeparator)
+	proxyUri = proxyUri + "/:serviceName/*proxyPath"
+	engine.Any(proxyUri, handler.Proxy)
 
 	return engine
 }

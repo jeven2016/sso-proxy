@@ -1,5 +1,7 @@
 package utils
 
+const ClientId = "sso-proxy"
+
 const (
 	RealmParam       = "realm"
 	Oauth2Token      = "oauth2Token"
@@ -11,8 +13,9 @@ const (
 )
 
 const (
-	SPACE        = " "
-	UrlSeparator = "/"
+	SPACE         = " "
+	UrlSeparator  = "/"
+	VarIamBaseUrl = "${iamBaseUrl}"
 )
 
 const (

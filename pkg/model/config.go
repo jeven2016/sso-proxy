@@ -26,7 +26,9 @@ type SsoProxyConfig struct {
 	Port                int             `mapstructure:"port"`
 	BindAddress         string          `mapstructure:"bindAddress"`
 	SessionSetting      SessionSetting  `mapstructure:"sessionSetting"`
+	IamBaseUrl          string          `mapstructure:"iamBaseUrl"`
 	OidcAuthCallbackUrl string          `mapstructure:"oidcAuthCallbackUrl"`
+	GlobalPublicUris    []string        `mapstructure:"globalPublicUris"`
 	OidcScopes          []string        `mapstructure:"oidcScopes"`
 	OidcClients         []Client        `mapstructure:"oidcClients"`
 	EnableDevFeatures   bool            `mapstructure:"enableDevFeatures"`
@@ -41,9 +43,23 @@ type PageParam struct {
 	Max   int `mapstructure:"max"`
 }
 
+type RegisterSetting struct {
+	ClientId               string   `mapstructure:"clientId"`
+	Name                   string   `mapstructure:"name"`
+	GenerateSecret         bool     `mapstructure:"generateSecret"`
+	Secret                 string   `mapstructure:"secret"`
+	Enabled                bool     `mapstructure:"enabled"`
+	StandardFlowEnabled    bool     `mapstructure:"standardFlowEnabled"`
+	ServiceAccountsEnabled bool     `mapstructure:"serviceAccountsEnabled"`
+	WebOrigin              []string `mapstructure:"webOrigin"`
+	RedirectURIs           []string `mapstructure:"redirectURIs"`
+}
+
 type SyncClients struct {
-	EnabledOnStartup bool      `mapstructure:"enabledOnStartup"`
-	PageParam        PageParam `mapstructure:"pageParam"`
+	EnabledOnStartup bool            `mapstructure:"enabledOnStartup"`
+	AutoRegister     bool            `mapstructure:"autoRegister"`
+	RegisterSetting  RegisterSetting `mapstructure:"registerSetting"`
+	PageParam        PageParam       `mapstructure:"pageParam"`
 }
 
 // Authenticator 校验器, 当前只支持keycloak
@@ -72,6 +88,7 @@ type Client struct {
 type Route struct {
 	ServiceName string            `mapstructure:"serviceName"`
 	Url         string            `mapstructure:"url"`
+	PublicUris  []string          `mapstructure:"publicUris"`
 	Filters     map[string]string `mapstructure:"filters"`
 }
 

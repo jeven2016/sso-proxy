@@ -2,76 +2,89 @@ package startup
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"github.com/Nerzal/gocloak/v11"
 	"go.uber.org/zap"
 
+	"sso-proxy/pkg/handler"
 	"sso-proxy/pkg/model"
 	"sso-proxy/pkg/utils"
 )
 
 func SyncClients() {
-	var masterClient *model.Client
-	for _, client := range utils.GetConfig().SsoProxyConfig.OidcClients {
-		if client.Realm == utils.IamMasterRealm {
-			masterClient = &client
-			break
-		}
-	}
-
-	if masterClient == nil {
-		utils.Log().Fatal("[!!!] no master client configured in config.yaml that means lacking ways to " +
-			"figure out what realms and clients configured in IAM side")
+	authenticator := utils.GetAuthenticator()
+	if !authenticator.SyncClients.EnabledOnStartup {
+		utils.Log().Info("client sync is ignored")
 		return
 	}
 
-	var ctx = context.Background()
-	var authenticator = utils.GetAuthenticator()
+	iamClient := handler.NewIamClient()
 
-	// keycloak service account client
-	kcClient := gocloak.NewClient(authenticator.Url,
-		gocloak.SetAuthRealms(utils.AuthRealm),
-		gocloak.SetAuthAdminRealms(utils.AuthAdminRealms))
+	// 初始化一个master realm下的sso-proxy client
+	masterClient, masterClientCfg := iamClient.InitMasterClient(utils.GetConfig().SsoProxyConfig.OidcClients,
+		authenticator)
 
-	// 申请一个master realm下service account的token
-	grantType := "client_credentials"
-	token, err := kcClient.GetToken(ctx, utils.IamMasterRealm, gocloak.TokenOptions{
-		GrantType:    &grantType,
-		ClientID:     &masterClient.ClientId,
-		ClientSecret: &masterClient.Secret,
-	})
+	if masterClient == nil || masterClientCfg == nil {
+		utils.Log().Error("Failed to initialize a sso-proxy for master realm, the step 'SyncClients' is aborted")
+		return
+	}
 
+	// 申请master realm下service account的token
+	token, err := getServiceAccountToken(masterClient, masterClientCfg)
 	if err != nil {
-		// 在日志中隐藏真实的secret，只提示是否为空
-		var secretDesc = "[Blank]"
-		if len(masterClient.Secret) > 0 {
-			secretDesc = "[Not Blank]"
-		}
-
-		utils.Log().Warn("Failed to retrieve a token", zap.Error(err), zap.String("realm", "master"),
-			zap.String("clientId", masterClient.ClientId), zap.String("secret", secretDesc))
+		logInitError(masterClientCfg, err)
+		os.Exit(1)
 		return
 	}
 
 	// 获取所有的realm
-	results, err := kcClient.GetRealms(ctx, token.AccessToken)
+	results, err := (*masterClient).GetRealms(context.Background(), token.AccessToken)
 	if err != nil {
-		utils.Log().Error("Failed to retrieve all realms", zap.String("token", token.AccessToken))
+		utils.Log().Error("Failed to retrieve all realms", zap.String("token", token.AccessToken),
+			zap.Error(err))
 		return
 	}
 
 	for _, realmRepresentation := range results {
 		// 获取realm下sso-proxy的client配置
-		syncRealmClients(kcClient, masterClient, ctx, token, realmRepresentation.Realm, authenticator)
+		syncRealmClients(masterClient, context.Background(),
+			token, realmRepresentation.Realm, authenticator)
 	}
+	utils.Log().Info("Completed looking for registered clients(sso-proxy)")
 }
 
-func syncRealmClients(kcClient gocloak.GoCloak, masterClient *model.Client, ctx context.Context,
-	token *gocloak.JWT, realm *string, authenticator *model.Authenticator) {
+func getServiceAccountToken(masterClient *gocloak.GoCloak, masterClientCfg *model.Client) (*gocloak.JWT, error) {
+	grantType := "client_credentials"
+	token, err := (*masterClient).GetToken(context.Background(),
+		utils.IamMasterRealm, gocloak.TokenOptions{
+			GrantType:    &grantType,
+			ClientID:     &masterClientCfg.ClientId,
+			ClientSecret: &masterClientCfg.Secret,
+		})
+	return token, err
+}
 
-	clients, err := kcClient.GetClients(ctx, token.AccessToken, *realm,
-		gocloak.GetClientsParams{First: &authenticator.SyncClients.PageParam.First,
+func logInitError(masterClientCfg *model.Client, err error) {
+	// 在日志中隐藏真实的secret，只提示是否为空
+	var secretDesc = "[Blank]"
+	// if len(masterClientCfg.Secret) > 0 {
+	// 	secretDesc = "[Not Blank]"
+	// }
+	secretDesc = masterClientCfg.Secret
+
+	utils.Log().Error("Failed to generate a token for service account", zap.Error(err), zap.String("realm", "master"),
+		zap.String("clientId", masterClientCfg.ClientId), zap.String("secret", secretDesc),
+		zap.String("providerUrlPrefix", masterClientCfg.ProviderUrlPrefix))
+}
+
+func syncRealmClients(kcClient *gocloak.GoCloak, ctx context.Context, token *gocloak.JWT, realm *string, authenticator *model.Authenticator) {
+	thisClientId := utils.ClientId
+
+	// Todo: master service account 无法获取其他realm下的client
+	clients, err := (*kcClient).GetClients(ctx, token.AccessToken, *realm,
+		gocloak.GetClientsParams{ClientID: &thisClientId, First: &authenticator.SyncClients.PageParam.First,
 			Max: &authenticator.SyncClients.PageParam.Max})
 
 	if err != nil {
@@ -80,14 +93,18 @@ func syncRealmClients(kcClient gocloak.GoCloak, masterClient *model.Client, ctx 
 	}
 
 	var hasRealmClient bool
+	var ignoreClient bool
 	for _, client := range clients {
-		if !strings.EqualFold(*client.ClientID, "sso-proxy") || clientExists(client, realm) {
+		// 只关注sso-proxy client
+		if *client.ClientID != utils.ClientId {
 			continue
 		}
 
-		issuer, err := kcClient.GetIssuer(ctx, *realm)
+		ignoreClient = hasOverlap(realm)
+
+		issuer, err := (*kcClient).GetIssuer(ctx, *realm)
 		if err != nil {
-			utils.Log().Error("Failed to retrieve issuer url in realm " + *realm)
+			utils.Log().Error("Failed to retrieve issuer url in realm "+*realm, zap.Error(err))
 			return
 		}
 
@@ -104,23 +121,81 @@ func syncRealmClients(kcClient gocloak.GoCloak, masterClient *model.Client, ctx 
 			Secret:            *client.Secret,
 			ProviderUrlPrefix: providerUrlPrefix,
 		}
-		utils.GetConfig().SsoProxyConfig.OidcClients = append(utils.GetConfig().SsoProxyConfig.OidcClients, oidcClient)
+		appendOidcClient(oidcClient)
 		hasRealmClient = true
 		break
 	}
 
-	if !hasRealmClient {
+	if !hasRealmClient && !ignoreClient {
 		utils.Log().Info("No sso-proxy client configured in realm '" + *realm + "'")
+		registerNewClient(kcClient, authenticator, token, realm)
 	}
 }
 
-func clientExists(item *gocloak.Client, realm *string) bool {
-	var clients = utils.GetConfig().SsoProxyConfig.OidcClients
-
-	for _, c := range clients {
-		if strings.EqualFold(*realm, c.Realm) && strings.EqualFold(*item.ClientID, c.ClientId) {
+// 判断本地配置文件中是否已经配置了该oidcClient, 而且IAM上在对应的realm下也存在同名的client
+func hasOverlap(realm *string) bool {
+	// 如果配置文件中在对应的realm定义了该client, 则使用配置文件中的设定,不需要再重新创建一个model.Client
+	for _, c := range utils.GetConfig().SsoProxyConfig.OidcClients {
+		if c.Realm == *realm {
 			return true
 		}
 	}
 	return false
+}
+
+func appendOidcClient(oidcClient model.Client) {
+	utils.GetConfig().SsoProxyConfig.OidcClients = append(utils.GetConfig().SsoProxyConfig.OidcClients, oidcClient)
+}
+
+func registerNewClient(kcClient *gocloak.GoCloak, authenticator *model.Authenticator, token *gocloak.JWT, realm *string) {
+	if authenticator.SyncClients.AutoRegister {
+		// 如果realm下没有client，自动注册一个
+		registerSetting := authenticator.SyncClients.RegisterSetting
+
+		// 如果需要自动生成secret，则生成
+		var defaultSecret = registerSetting.Secret
+		if registerSetting.GenerateSecret {
+			secret, err := utils.RandString(16)
+			if err != nil {
+				utils.Log().Error("Failed to generate a client secret", zap.Error(err))
+				return
+			}
+			defaultSecret = secret
+		}
+
+		// https://keycloak.discourse.group/t/invalid-realm-configuration-acr-loa-map-after-update-to-19-0-1/17332/7
+		var attributes = map[string]string{
+			"acr.loa.map": "{}",
+		}
+
+		realmId, err := (*kcClient).CreateClient(context.Background(), token.AccessToken, *realm, gocloak.Client{
+			ClientID:               &registerSetting.ClientId,
+			Name:                   &registerSetting.Name,
+			Secret:                 &defaultSecret,
+			Enabled:                &registerSetting.Enabled,
+			StandardFlowEnabled:    &registerSetting.StandardFlowEnabled,
+			ServiceAccountsEnabled: &registerSetting.ServiceAccountsEnabled,
+			WebOrigins:             &registerSetting.WebOrigin,
+			RedirectURIs:           &registerSetting.RedirectURIs,
+			Attributes:             &attributes,
+		})
+		if err != nil {
+			utils.Log().Error("Failed to register a client", zap.String("clientId", registerSetting.ClientId),
+				zap.String("realm", *realm))
+			return
+		}
+		utils.Log().Info("Registered a client automatically for this realm", zap.String("clientId", registerSetting.ClientId),
+			zap.String("realm", *realm), zap.String("realmId", realmId))
+
+		providerUrlPrefix := strings.TrimRight(authenticator.Url, utils.UrlSeparator) +
+			utils.UrlSeparator + "realms/" + *realm
+
+		oidcClient := model.Client{
+			Realm:             *realm,
+			ClientId:          registerSetting.ClientId,
+			Secret:            registerSetting.Secret,
+			ProviderUrlPrefix: providerUrlPrefix,
+		}
+		appendOidcClient(oidcClient)
+	}
 }

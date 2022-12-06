@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/duke-git/lancet/v2/slice"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
 	"sso-proxy/pkg/model"
@@ -25,19 +26,28 @@ func GetApp() *model.App {
 }
 
 func GetAuthenticator() *model.Authenticator {
-	return &GetConfig().SsoProxyConfig.Authenticators[0]
+	authenticators := GetConfig().SsoProxyConfig.Authenticators
+	if len(authenticators) == 0 {
+		panic("There should be any authenticators defined")
+	}
+	authenticator := authenticators[0]
+	authenticator.Url = constructProviderUrl(authenticator.Url)
+	return &authenticator
 }
 
 func RedirectLogin(c *gin.Context) {
 	c.Redirect(302, GetApp().LoginPage)
+	c.Abort()
 }
 
 func RedirectHome(c *gin.Context) {
 	c.Redirect(302, GetApp().HomePage)
+	c.Abort()
 }
 
 func IsRestApi(uri string) bool {
-	return strings.HasPrefix(uri, "/api/") ||
+	proxyPrefix := GetConfig().SsoProxyConfig.ReverseProxy.UrlPrefix
+	return strings.HasPrefix(uri, proxyPrefix) ||
 		strings.HasPrefix(uri, "/auth/userinfo") ||
 		strings.HasPrefix(uri, "/internal/")
 }
@@ -53,4 +63,14 @@ func Exists(array []string, value string) bool {
 
 	_, exists := slice.Find(array, checkExists)
 	return exists
+}
+
+func GetRealm(session *sessions.Session) string {
+	return (*session).Get(RealmParam).(string)
+}
+
+// 将provider url中的变量替换成真正的地址
+func constructProviderUrl(providerUrl string) string {
+	return strings.ReplaceAll(providerUrl, VarIamBaseUrl, GetConfig().
+		SsoProxyConfig.IamBaseUrl)
 }

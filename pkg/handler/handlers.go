@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
+	"time"
 
 	"github.com/Nerzal/gocloak/v11"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
@@ -43,12 +46,7 @@ func HandleAuthCode(c *gin.Context) {
 		return
 	}
 
-	maxAge := utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge
-
-	// 设置临时cookie
-	utils.SetCookie(c, utils.CookieRealmParam, realm, maxAge)
-	utils.SetCookie(c, utils.CookieStateParam, state, maxAge)
-	utils.SetCookie(c, utils.CookieNonceParam, nonce, maxAge)
+	setCookies(c, realm, state, nonce, 0)
 
 	c.Redirect(http.StatusFound, authCfg.Oauth2Config.AuthCodeURL(state, oidc.Nonce(nonce)))
 }
@@ -106,12 +104,7 @@ func HandleToken(c *gin.Context) {
 	}
 
 	// 清理cookie
-	utils.SetCookie(c, utils.CookieRealmParam, realm, -1)
-	utils.SetCookie(c, utils.CookieStateParam, state, -1)
-	utils.SetCookie(c, utils.CookieNonceParam, "", -1)
-
-	// utils.SetCookie(c, utils.COOKIE_TOKEN_PARAM, oauth2Token.AccessToken,
-	// 	utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge)
+	setCookies(c, realm, state, nonce, -1)
 
 	// 保存Session
 	session := sessions.Default(c)
@@ -132,7 +125,7 @@ func HandleToken(c *gin.Context) {
 func GetUserInfo(c *gin.Context) {
 	session := sessions.Default(c)
 	oauth2Token := session.Get(utils.Oauth2Token).(oauth2.Token)
-	realm := session.Get(utils.RealmParam).(string)
+	realm := utils.GetRealm(&session)
 	userInfo, err := utils.GetByRealm(realm).Provider.UserInfo(context.Background(), oauth2.StaticTokenSource(&oauth2Token))
 	if err != nil {
 		c.String(http.StatusUnauthorized, "%v", err.Error())
@@ -146,16 +139,40 @@ func GetUserInfo(c *gin.Context) {
 
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
+	token, authCfg := getFromSession(session)
+	if token != nil {
+		tokenUrl := authCfg.Provider.Endpoint().TokenURL
+		lastSepIndex := strings.LastIndex(tokenUrl, utils.UrlSeparator)
+		logoutUrl := tokenUrl[:lastSepIndex] + utils.UrlSeparator + "logout"
+		res, err := resty.New().
+			SetTimeout(time.Duration(20)*time.Second).
+			SetHeader("Content-Type", "application/x-www-form-urlencoded").
+			SetHeader("Authorization", "Bearer "+token.AccessToken).
+			SetFormData(map[string]string{
+				"client_id":     authCfg.Oauth2Config.ClientID,
+				"client_secret": authCfg.Oauth2Config.ClientSecret,
+				"refresh_token": token.RefreshToken,
+			}).
+			R().
+			Post(logoutUrl)
+		if err != nil {
+			utils.Log().Warn("Failed to logout", zap.Error(err), zap.String("response", res.String()))
+		}
+	}
 	session.Clear()
 	if err := session.Save(); err != nil {
 		utils.Log().Error("failed to save session", zap.Error(err))
+		c.Status(http.StatusUnauthorized)
+		return
 	}
 	c.Status(http.StatusOK)
 }
 
+// GetAllClients Just For Test
 func GetAllClients(c *gin.Context) {
+	authenticator := utils.GetAuthenticator()
 	// keycloak service account client
-	kcClient := gocloak.NewClient(utils.GetConfig().SsoProxyConfig.Authenticators[0].Url,
+	kcClient := gocloak.NewClient(authenticator.Url,
 		gocloak.SetAuthRealms("realms"),
 		gocloak.SetAuthAdminRealms("admin/realms"))
 
@@ -180,8 +197,8 @@ func GetAllClients(c *gin.Context) {
 	}
 
 	// realms, err := kcClient.GetRealms(context.Background(), token.AccessToken)
-	var first = 0
-	var max = 1000
+	var first = authenticator.SyncClients.PageParam.First
+	var max = authenticator.SyncClients.PageParam.Max
 	clients, err := kcClient.GetClients(context.Background(), token.AccessToken, "master", gocloak.GetClientsParams{
 		First: &first,
 		Max:   &max,
@@ -202,4 +219,25 @@ func getCookie(c *gin.Context, name string) (string, error) {
 		return "", err
 	}
 	return state, err
+}
+
+func setCookies(c *gin.Context, realm string, state string, nonce string, maxAge int) {
+	// 设置临时cookie
+	// MaxAge=0 means no 'Max-Age' attribute specified.
+	// MaxAge<0 means delete cookie now, equivalently 'Max-Age: 0'
+	// MaxAge>0 means Max-Age attribute present and given in seconds
+	utils.SetCookie(c, utils.CookieRealmParam, realm, maxAge)
+	utils.SetCookie(c, utils.CookieStateParam, state, maxAge)
+	utils.SetCookie(c, utils.CookieNonceParam, nonce, maxAge)
+}
+
+func getFromSession(session sessions.Session) (*oauth2.Token, *model.AuthConfig) {
+	oauth2Token := session.Get(utils.Oauth2Token)
+	realm := session.Get(utils.RealmParam).(string)
+	authCfg := utils.GetByRealm(realm)
+	if oauth2Token == nil {
+		return nil, nil
+	}
+	rawToken := oauth2Token.(oauth2.Token)
+	return &rawToken, authCfg
 }

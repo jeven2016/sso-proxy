@@ -3,9 +3,11 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/gobwas/glob"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
@@ -18,11 +20,8 @@ func CheckSession() gin.HandlerFunc {
 		uri := c.Request.URL.Path
 
 		// 需要排除的请求，对应无需登录调用的url
-		publicUris := []string{"/auth", "/auth/callback", "/internal/clients"}
-
-		// public uri不需要校验token
-		ok := utils.Exists(publicUris, uri)
-		if ok {
+		isPublic := isPublicUri(c)
+		if isPublic {
 			c.Next()
 			return
 		}
@@ -84,4 +83,50 @@ func CheckSession() gin.HandlerFunc {
 			c.Next()
 		}
 	}
+}
+
+// 判断当前Uri是否是public uri
+func isPublicUri(c *gin.Context) bool {
+	path := c.Request.URL.Path
+	ssoProxyConfig := utils.GetConfig().SsoProxyConfig
+
+	// 是否全局配置的public uris
+	var isPublic = publicUriMatches(ssoProxyConfig.GlobalPublicUris, path)
+	if !isPublic {
+
+		// 必须是代理的请求才会被处理
+		if !strings.HasPrefix(path, ssoProxyConfig.ReverseProxy.UrlPrefix) {
+			return isPublic
+		}
+
+		// 每个route内部的public uris， 先根据uri获取对应的serviceName，再获取对应的route
+		// format: /proxy/{serviceName}/***
+		var serviceName string
+		segments := strings.Split(path, utils.UrlSeparator)
+		if len(segments) < 3 {
+			return false
+		}
+		serviceName = segments[2]
+		if len(serviceName) == 0 {
+			return false
+		}
+
+		// 判断uri是否是配置文件中配置的public uri
+		for _, route := range ssoProxyConfig.ReverseProxy.Routes {
+			if route.ServiceName == serviceName {
+				isPublic = publicUriMatches(route.PublicUris, path)
+				break
+			}
+		}
+	}
+	return isPublic
+}
+
+func publicUriMatches(uris []string, specificUri string) bool {
+	for _, publicUri := range uris {
+		if glob.MustCompile(publicUri).Match(specificUri) {
+			return true
+		}
+	}
+	return false
 }

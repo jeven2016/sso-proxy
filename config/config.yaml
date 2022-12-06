@@ -3,7 +3,13 @@ sso-proxy:
   bindAddress: 0.0.0.0
   sessionSetting:
     maxAge: 1800  # seconds, session idle timeout
-  oidcAuthCallbackUrl: http://localhost:9900/auth/callback
+  iamBaseUrl: http://localhost:8080 # iam base url
+  oidcAuthCallbackUrl: http://localhost:9900/auth/callback # 申请token的回调地址，IAM会回调该地址返回token
+  globalPublicUris: # 不需要登录就可以调用的借口
+    - "/auth"
+    - "/auth/callback"
+    - "/public/**"
+    - "**.{js,json,jpg,ico,png}"
   oidcScopes:
     - openid
     - profile
@@ -12,15 +18,28 @@ sso-proxy:
     - realm: master
       clientId: sso-proxy  # client created in master realm and has service account enabled
       secret: eUGbBI99r9P3kg8bIVcykq7YMnU741JG
-      providerUrlPrefix: http://localhost:8080/realms/master
+      providerUrlPrefix: ${iamBaseUrl}/realms/master
 
   authenticators:
     - type: keycloak
       name: keycloak-authenticator
-      url: http://localhost:8080
+      url: ${iamBaseUrl}
       syncClients:
         enabledOnStartup: true
-        autoRegister: false #todo: 如果realm下没有sso-proxy,则是否自动注册
+        autoRegister: true #todo: 如果realm下没有sso-proxy,则是否自动注册
+        registerSetting:
+          clientId: sso-proxy
+          name: sso-proxy
+          generateSecret: true
+          #          secret: test  #将generateSecret设置为false， 可以手段设置secret
+          enabled: true
+          standardFlowEnabled: true
+          serviceAccountsEnabled: false
+          webOrigin:
+            - "*"
+          redirectURIs:
+            - "*"
+
         pageParam: #分页查询的参数设置, first, max
           first: 0
           max: 100
@@ -32,7 +51,7 @@ sso-proxy:
       grantType: authorization_code
 
   reverseProxy:
-    urlPrefix: /api
+    urlPrefix: /proxy  # 代理请求的base uri
     httpTransport:
       timeout: 10  # seconds
       keepAlive: 20 # seconds
@@ -44,15 +63,15 @@ sso-proxy:
         insecureSkipVerify: true
 
     routes:
-      # request path: /proxy/iam/**
+      # request path: /proxy/iam/**, 格式：${reverseProxy.urlPrefix}/${routes.serviceName}
       - serviceName: iam
-        url: http://localhost:8080/ # the url of backend service
+        url: http://localhost:8088/login # the url of backend service
         mirrorRequest:
-          enabled: true
-        #          forwardTo: http://www.baidu.com
+          enabled: false
+        # forwardTo: http://www.baidu.com
+        publicUris: # 未经登录就可以调用的uri
+          - "**/realms/**/departments-resources/**"
         filters:
-          #https://github.com/spf13/viper/issues/1014
-          #viper将下列key序列化成map时，key会全部为小写
           - SetHeader: Host=www.baidu.com,X-Forwarded-Host=www.baidu.com
           - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
 

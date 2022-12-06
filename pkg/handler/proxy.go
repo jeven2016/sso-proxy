@@ -19,6 +19,7 @@ import (
 )
 
 func Proxy(c *gin.Context) {
+	utils.Log().Info("A request incoming", zap.String("path", c.Request.URL.String()))
 	proxySetting := utils.GetConfig().SsoProxyConfig.ReverseProxy
 	serviceName := c.Param("serviceName")
 
