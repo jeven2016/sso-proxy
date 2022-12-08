@@ -31,7 +31,7 @@ func run() {
 	var startServerCmd = &cobra.Command{
 		Use:   "start ",
 		Short: "start a web server to handle HTTP requests",
-		Long:  `start a web server to handle HTTP requests and will perform standard OIDC flow to interact with IAM`,
+		Long:  `start a web server to handle HTTP requests and perform standard OIDC flow to interact with IAM`,
 		Run: func(cmd *cobra.Command, args []string) {
 			start(cmd)
 		},
@@ -70,9 +70,9 @@ func start(cmd *cobra.Command) {
 		utils.SetupLog(utils.GetConfig())
 
 		// 初始化web服务
-		server := startup.InitWebServer()
+		server := startup.InitWebEndpoints()
 
-		// 同步已有的client
+		// 同步IAM上的client
 		startup.SyncClients()
 
 		// 绑定地址，启动

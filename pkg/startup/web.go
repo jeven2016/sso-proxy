@@ -9,6 +9,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/memstore"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
 	"sso-proxy/pkg/handler"
@@ -17,8 +18,8 @@ import (
 	"sso-proxy/pkg/utils"
 )
 
-// InitWebServer Start a web server
-func InitWebServer() *gin.Engine {
+// InitWebEndpoints Start a web server
+func InitWebEndpoints() *gin.Engine {
 	registerGobType()
 	store := memstore.NewStore([]byte("secret"))
 
@@ -32,14 +33,16 @@ func InitWebServer() *gin.Engine {
 
 	var engine = gin.Default()
 	engine.Use(sessions.Sessions("SSO-PROXY", store))
-	engine.Use(middleware.CheckSession(),
+	engine.Use(middleware.ValidateSession(),
 		middleware.GinLogger(),
 		middleware.GinRecovery(utils.GetConfig().SsoProxyConfig.EnableDevFeatures))
 	gin.SetMode(gin.ReleaseMode)
 
-	// refresh token
-	// ts := oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: ""})
-	// tok, err := ts.Token()
+	engine.GET("/public/test", func(c *gin.Context) {
+		header := c.GetHeader(utils.HeaderAuthorization)
+		utils.Log().Info(utils.HeaderAuthorization, zap.String("header", header))
+	})
+
 	engine.GET("/auth", handler.HandleAuthCode)
 
 	// https://blog.csdn.net/zhanghongxia8285/article/details/107321838

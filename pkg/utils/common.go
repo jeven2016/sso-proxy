@@ -74,3 +74,21 @@ func constructProviderUrl(providerUrl string) string {
 	return strings.ReplaceAll(providerUrl, VarIamBaseUrl, GetConfig().
 		SsoProxyConfig.IamBaseUrl)
 }
+
+func SetSession(ctx *gin.Context, key string, value any, saveImmediately bool) error {
+	session := sessions.Default(ctx)
+	session.Set(key, value)
+	if saveImmediately {
+		return session.Save()
+	}
+	return nil
+}
+
+func RemoveFromSession(ctx *gin.Context, key string, saveImmediately bool) error {
+	session := sessions.Default(ctx)
+	session.Delete(key)
+	if saveImmediately {
+		return session.Save()
+	}
+	return nil
+}

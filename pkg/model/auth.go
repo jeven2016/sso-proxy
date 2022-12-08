@@ -10,3 +10,8 @@ type AuthConfig struct {
 	Oauth2Config *oauth2.Config
 	Provider     *oidc.Provider
 }
+
+type UserInfo struct {
+	Realm    string         `json:"realm"`
+	UserInfo *oidc.UserInfo `json:"userInfo"`
+}

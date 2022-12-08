@@ -37,7 +37,8 @@ func Proxy(c *gin.Context) {
 	}
 	if serviceRoute.MirroringRequest {
 		// Mirroring HTTP requests
-
+		// ctx := c.Copy()
+		// forwardRequest(ctx, serviceRoute, proxySetting)
 	}
 
 	forwardRequest(c, serviceRoute, proxySetting)
@@ -52,6 +53,38 @@ func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting mode
 		return
 	}
 
+	transport := initHttpTransport(proxySetting)
+
+	proxy := httputil.NewSingleHostReverseProxy(parsedUrl)
+	proxy.Transport = transport
+	originDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		updateRequest(req, originDirector, c, parsedUrl, serviceRoute)
+	}
+
+	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, err error) {
+		reqUrl := request.URL.String()
+		utils.Log().Error("proxy error occurs", zap.Error(err), zap.String("url", reqUrl),
+			zap.String("method", request.Method))
+		writer.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+func updateRequest(req *http.Request, originDirector func(*http.Request), c *gin.Context,
+	parsedUrl *url.URL, serviceRoute *model.Route) {
+	originDirector(req)
+	req.Method = c.Request.Method
+	req.Header = c.Request.Header
+	req.URL.Scheme = parsedUrl.Scheme
+	req.Host = parsedUrl.Host
+	req.URL.Host = parsedUrl.Host
+	req.URL.Path = c.Param("proxyPath")
+	handleFilters(req, serviceRoute.Filters, c)
+}
+
+func initHttpTransport(proxySetting model.ReverseProxy) http.RoundTripper {
 	httpTransport := proxySetting.HttpTransport
 	var transport http.RoundTripper = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -66,29 +99,7 @@ func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting mode
 		ExpectContinueTimeout: time.Duration(httpTransport.Tls.ExpectContinueTimeout) * time.Second,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: httpTransport.Tls.InsecureSkipVerify},
 	}
-
-	proxy := httputil.NewSingleHostReverseProxy(parsedUrl)
-	proxy.Transport = transport
-	originDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originDirector(req)
-		req.Method = c.Request.Method
-		req.Header = c.Request.Header
-		req.URL.Scheme = parsedUrl.Scheme
-		req.Host = parsedUrl.Host
-		req.URL.Host = parsedUrl.Host
-		req.URL.Path = c.Param("proxyPath")
-		handleFilters(req, serviceRoute.Filters, c)
-	}
-
-	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, err error) {
-		reqUrl := request.URL.String()
-		utils.Log().Error("proxy error occurs", zap.Error(err), zap.String("url", reqUrl),
-			zap.String("method", request.Method))
-		writer.WriteHeader(http.StatusServiceUnavailable)
-	}
-
-	proxy.ServeHTTP(c.Writer, c.Request)
+	return transport
 }
 
 // 处理过滤器

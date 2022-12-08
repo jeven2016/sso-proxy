@@ -14,8 +14,8 @@ import (
 	"sso-proxy/pkg/utils"
 )
 
-// CheckSession 拦截请求并对session和token的失效期进行检测。
-func CheckSession() gin.HandlerFunc {
+// ValidateSession 拦截请求并对session和token的失效期进行检测。
+func ValidateSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uri := c.Request.URL.Path
 
@@ -43,34 +43,20 @@ func CheckSession() gin.HandlerFunc {
 		realm := session.Get(utils.RealmParam).(string)
 		authCfg := utils.GetByRealm(realm)
 
-		// token处于有效期，校验token是否真实
-		if rawToken.Valid() {
-			idToken := session.Get(utils.Oauth2RawIdToken).(string)
-			verifiedIdToken, err := authCfg.Verifier.Verify(context.Background(), idToken)
-			if err != nil {
-				utils.Log().Error("Invalid id token", zap.Any("idToken", verifiedIdToken))
-				if utils.IsRestApi(uri) {
-					c.AbortWithStatus(http.StatusUnauthorized)
-					return
-				}
-				utils.RedirectLogin(c)
-				return
-			}
-			c.Next()
-			return
-		}
-
+		// 校验token是否真实
 		// The refresh token lifetime is controlled by the SSO Session Idle Setting. 30 minutes = 30 * 60 = 1800 seconds (the refresh_expires_in value)
 		// session不过期(视为没有到达refresh token expiry time)，但是token过期
 		if !rawToken.Valid() {
 			oldRefreshToken := rawToken.RefreshToken
-			session.Delete("oauth2Token")
+			if err := utils.RemoveFromSession(c, utils.Oauth2Token, true); err != nil {
+				utils.Log().Error("Failed to remove old token from session", zap.Error(err))
+			}
 
 			// refresh token
 			ts := authCfg.Oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: oldRefreshToken})
 			rawToken, err := ts.Token()
 			if err != nil {
-				utils.Log().Error("Failed to refresh token", zap.Error(err), zap.String(utils.RealmParam, realm))
+				utils.Log().Info("No token retrieved while the refresh token may expired", zap.Error(err), zap.String(utils.RealmParam, realm))
 				if utils.IsRestApi(uri) {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
@@ -78,8 +64,13 @@ func CheckSession() gin.HandlerFunc {
 				utils.RedirectLogin(c)
 				return
 			}
-			utils.Log().Info("token refreshed", zap.String("old refresh token", oldRefreshToken))
-			session.Set(utils.Oauth2Token, *rawToken)
+			utils.Log().Debug("token refreshed", zap.String("old refresh token", oldRefreshToken))
+
+			// 将刷新后的session再保存到session中
+			if err = utils.SetSession(c, utils.Oauth2Token, *rawToken, true); err != nil {
+				utils.Log().Error("Failed to update refreshed token in session", zap.Error(err))
+				return
+			}
 			c.Next()
 		}
 	}

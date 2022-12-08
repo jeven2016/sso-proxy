@@ -22,7 +22,7 @@ func SetBearerToken(request *http.Request, _ *http.Response, c *gin.Context, val
 			if token != nil {
 				oauth2Token := token.(oauth2.Token)
 				iamAccessToken := key + " " + oauth2Token.AccessToken
-				print("iamAccessToken=" + oauth2Token.AccessToken)
+				print("iamAccessToken=" + iamAccessToken)
 				request.Header.Set(utils.HeaderAuthorization, iamAccessToken)
 			}
 		}

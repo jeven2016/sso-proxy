@@ -134,8 +134,8 @@ func GetUserInfo(c *gin.Context) {
 			zap.Reflect("errorType", reflect.TypeOf(err)))
 		return
 	}
-	utils.Log().Info("userInfo", zap.Any("data", userInfo))
-	c.JSON(200, userInfo)
+
+	c.JSON(200, &model.UserInfo{Realm: realm, UserInfo: userInfo})
 }
 
 func Logout(c *gin.Context) {
@@ -157,7 +157,7 @@ func Logout(c *gin.Context) {
 			R().
 			Post(logoutUrl)
 		if err != nil {
-			utils.Log().Warn("Failed to logout", zap.Error(err), zap.String("response", res.String()))
+			utils.Log().Warn("Failed to logout from IAM", zap.Error(err), zap.String("response", res.String()))
 		}
 	}
 	session.Clear()
