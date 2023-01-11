@@ -13,9 +13,22 @@ import (
 	"sso-proxy/pkg/utils"
 )
 
+const banner string = `
+   _____ _____  ____         _____  _____   ______   ____     __
+  / ____/ ____|/ __ \       |  __ \|  __ \ / __ \ \ / /\ \   / /
+ | (___| (___ | |  | |______| |__) | |__) | |  | \ V /  \ \_/ /
+  \___ \\___ \| |  | |______|  ___/|  _  /| |  | |> <    \   /
+  ____) |___) | |__| |      | |    | | \ \| |__| / . \    | |
+ |_____/_____/ \____/       |_|    |_|  \_\\____/_/ \_\   |_|
+A centralized SSO service to proxy any sso requests sent from different 3rd party application (version: 0.0.1)`
+
 // 启动web服务
 func main() {
 	run()
+}
+
+func PrintBanner() {
+	fmt.Println(banner)
 }
 
 // 使用命令行启动server
@@ -61,6 +74,8 @@ func start(cmd *cobra.Command) {
 		return
 	}
 
+	PrintBanner()
+
 	// 加载配置文件
 	err = utils.LoadConfig(cfgPath)
 	if err == nil {
@@ -85,5 +100,8 @@ func start(cmd *cobra.Command) {
 
 // 在控制台输出出错信息
 func printCmdErr(err error) {
-	fmt.Fprintf(os.Stderr, "Error: '%s' \n", err)
+	_, err = fmt.Fprintf(os.Stderr, "Error: '%s' \n", err)
+	if err != nil {
+		panic(err)
+	}
 }

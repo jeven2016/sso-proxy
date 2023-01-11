@@ -1,6 +1,7 @@
 package proxyfilters
 
 import (
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"sso-proxy/pkg/utils"
 )
 
+// SetBearerToken ,在http header中添加bearer token
 func SetBearerToken(request *http.Request, _ *http.Response, c *gin.Context, value string) {
 	// "SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken"
 	entrySet := parseEntrySet(value)
@@ -22,7 +24,7 @@ func SetBearerToken(request *http.Request, _ *http.Response, c *gin.Context, val
 			if token != nil {
 				oauth2Token := token.(oauth2.Token)
 				iamAccessToken := key + " " + oauth2Token.AccessToken
-				print("iamAccessToken=" + iamAccessToken)
+				utils.Log().Debug("set bearer token for "+request.URL.String(), zap.String(utils.HeaderAuthorization, iamAccessToken))
 				request.Header.Set(utils.HeaderAuthorization, iamAccessToken)
 			}
 		}

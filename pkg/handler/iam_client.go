@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"context"
-
 	"github.com/Nerzal/gocloak/v11"
 
 	"sso-proxy/pkg/model"
@@ -19,19 +17,6 @@ var iamClient *IamClient
 func NewIamClient() *IamClient {
 	iamClient = &IamClient{}
 	return iamClient
-}
-func GetIamClient() *IamClient {
-	return iamClient
-}
-
-func GetMasterClient() *gocloak.GoCloak {
-	return iamClient.masterClient
-}
-
-func LogoutIam(realm string, refreshToken string) error {
-	client := (*iamClient).masterClient
-	return (*client).Logout(context.Background(), iamClient.masterClientCfg.ClientId,
-		iamClient.masterClientCfg.Secret, realm, refreshToken)
 }
 
 // InitMasterClient 初始化一个master realm下的sso-proxy client，以便能够以service account方式操纵IAM的内部资源

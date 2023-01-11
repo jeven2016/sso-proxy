@@ -2,10 +2,10 @@ sso-proxy:
   port: 9900
   bindAddress: 0.0.0.0
   sessionSetting:
-    maxAge: 1800  # seconds, session idle timeout
-  iamBaseUrl: http://localhost:8080 # iam base url
-  oidcAuthCallbackUrl: http://localhost:9900/auth/callback # 申请token的回调地址，IAM会回调该地址返回token
-  globalPublicUris: # 不需要登录就可以调用的借口
+    maxAge: 1800  # session的默认超时时间，单位秒
+  iamBaseUrl: http://localhost:8080 # 对接的IAM，base URL
+  oidcAuthCallbackUrl: http://localhost:9900/auth/callback # 申请token的回调地址，IAM会回调该地址再申请token
+  globalPublicUris: # 不需要登录就可以调用的uri
     - "/auth"
     - "/auth/callback"
     - "/public/**"
@@ -15,7 +15,7 @@ sso-proxy:
     - profile
     - email
   oidcClients:
-    - realm: master
+    - realm: master # 在IAM上master realm下注册的client，并启用Service Account。以便进行client的自注册
       clientId: sso-proxy  # client created in master realm and has service account enabled
       secret: eUGbBI99r9P3kg8bIVcykq7YMnU741JG
       providerUrlPrefix: ${iamBaseUrl}/realms/master
@@ -26,12 +26,12 @@ sso-proxy:
       url: ${iamBaseUrl}
       syncClients:
         enabledOnStartup: true
-        autoRegister: true #todo: 如果realm下没有sso-proxy,则是否自动注册
+        autoRegister: true # 如果realm下没有sso-proxy,自动注册
         registerSetting:
           clientId: sso-proxy
           name: sso-proxy
           generateSecret: true
-          # secret: test  #将generateSecret设置为false， 可以手段设置secret
+          # secret: test  #将generateSecret设置为false， 可以手动设置secret
           enabled: true
           standardFlowEnabled: true
           serviceAccountsEnabled: false
@@ -60,26 +60,25 @@ sso-proxy:
       tls:
         handShakeTimeout: 10 # seconds
         expectContinueTimeout: 1 # seconds
-        insecureSkipVerify: true
+        insecureSkipVerify: true # 忽略证书校验
 
     routes:
-      # request path: /proxy/iam/**, 格式：${reverseProxy.urlPrefix}/${routes.serviceName}
+      # 请求路径: /proxy/iam/**, 格式：${reverseProxy.urlPrefix}/${routes.serviceName}
       - serviceName: iam
         url: http://192.168.159.129:8080/ # the url of backend service
-        mirroringRequest: true #是否将请求复制到/mirror endpoint去打印完整的请求对象
         publicUris: # 未经登录就可以调用的uri
-          - "**/realms/**/departments-resources/**"
-        filters:
-          - SetHeader: Host=localhost:8080
-          - SetBearerToken: Bearer=iam.accessToken #iam.accessToken or openstack.accessToken
+          - "**/realms/**/departments-resource/**"
+        filters: # filter用于过滤request或response,进行一些特殊处理
+          - SetHeader: Host=localhost:8080, X-Forwarded-Host=localhost:8080  # 转发的请求需要添加请求头， keycloak有LB部署的情况下读取X-Forwarded-Host，非LB的情况下读取Host
+          - SetBearerToken: Bearer=iam.accessToken # 转发的请求携带IAM的access token. iam.accessToken or openstack.accessToken
 
   enableDevFeatures: false
   logSetting:
     logLevel: INFO
-    logPath: /var/log/sso-proxy
-    outputToConsole: true
+    logPath: /var/log/sso-proxy # 日志存放路径：${logPath}/${fileName}
+    outputToConsole: true  # 是否同时将日志打印到控制台
     fileName: sso-proxy.log
-    maxSizeInMB: 30
-    maxAgeInDay: 30
-    maxBackups: 10
-    compress: true
+    maxSizeInMB: 30   # 日志文件的体积
+    maxAgeInDay: 30   # 最多保留天数
+    maxBackups: 10    # 允许存在几个日志备份文件
+    compress: true    # 是否压缩保存历史文件

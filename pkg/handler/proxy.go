@@ -18,8 +18,10 @@ import (
 	"sso-proxy/pkg/utils"
 )
 
+// Proxy 反向代理其他服务的请求，并确保设置了对应的http头或access token
 func Proxy(c *gin.Context) {
-	utils.Log().Info("A request incoming", zap.String("path", c.Request.URL.String()))
+	proxyUrl := c.Request.URL.String()
+	utils.Log().Debug("A request incoming", zap.String("url", proxyUrl))
 	proxySetting := utils.GetConfig().SsoProxyConfig.ReverseProxy
 	serviceName := c.Param("serviceName")
 
@@ -31,19 +33,15 @@ func Proxy(c *gin.Context) {
 		}
 	}
 	if serviceRoute == nil {
-		utils.Log().Warn("no valid route found", zap.String("serviceName", serviceName))
-		c.AbortWithError(http.StatusBadRequest, errors.New("no valid route found"))
+		utils.Log().Warn("no valid route found", zap.String("serviceName", serviceName), zap.String("url", proxyUrl))
+		c.AbortWithError(http.StatusBadRequest, errors.New("no valid route found for "+serviceName))
 		return
-	}
-	if serviceRoute.MirroringRequest {
-		// Mirroring HTTP requests
-		// ctx := c.Copy()
-		// forwardRequest(ctx, serviceRoute, proxySetting)
 	}
 
 	forwardRequest(c, serviceRoute, proxySetting)
 }
 
+// 向后端服务转发请求
 func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting model.ReverseProxy) {
 	parsedUrl, err := url.Parse(serviceRoute.Url)
 	if err != nil {
@@ -69,21 +67,30 @@ func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting mode
 		writer.WriteHeader(http.StatusServiceUnavailable)
 	}
 
+	// 添加response
+	proxy.ModifyResponse = func(response *http.Response) error {
+		response.Header.Set("proxy-server", "SSO-PROXY v0.0.1")
+		return nil
+	}
+
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
+//更新转发后的请求对象
 func updateRequest(req *http.Request, originDirector func(*http.Request), c *gin.Context,
 	parsedUrl *url.URL, serviceRoute *model.Route) {
 	originDirector(req)
 	req.Method = c.Request.Method
 	req.Header = c.Request.Header
 	req.URL.Scheme = parsedUrl.Scheme
-	req.Host = parsedUrl.Host
 	req.URL.Host = parsedUrl.Host
 	req.URL.Path = c.Param("proxyPath")
+
+	//执行过滤器处理
 	handleFilters(req, serviceRoute.Filters, c)
 }
 
+//初始化http请求
 func initHttpTransport(proxySetting model.ReverseProxy) http.RoundTripper {
 	httpTransport := proxySetting.HttpTransport
 	var transport http.RoundTripper = &http.Transport{

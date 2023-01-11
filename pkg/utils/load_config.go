@@ -1,10 +1,8 @@
 package utils
 
 import (
-	"fmt"
 	"log"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 
 	"sso-proxy/pkg/model"
@@ -41,19 +39,18 @@ func LoadConfig(configPath string) error {
 	// 监控配置文件变化
 	viper.WatchConfig()
 
-	// 注意！！！配置文件发生变化后要同步到全局变量
-	viper.OnConfigChange(func(in fsnotify.Event) {
-		fmt.Println("Config file is changed, reload it now")
-		var newConfig = &model.Config{}
-
-		// 更新现有的配置
-		if err := viper.Unmarshal(newConfig); err != nil {
-			panic(fmt.Errorf("The config cann't be updated:%s \n", err))
-		}
-		config = newConfig
-
-		// todo：日志组件更新
-	})
+	//viper.OnConfigChange(func(in fsnotify.Event) {
+	//	fmt.Println("Config file is changed, reload it now")
+	//	var newConfig = &model.Config{}
+	//
+	//	// 更新现有的配置
+	//	if err := viper.Unmarshal(newConfig); err != nil {
+	//		panic(fmt.Errorf("The config cann't be updated:%s \n", err))
+	//	}
+	//	config = newConfig
+	//
+	//	// todo：日志组件更新
+	//})
 	return nil
 }
 

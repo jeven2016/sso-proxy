@@ -85,7 +85,6 @@ func logInitError(masterClientCfg *model.Client, err error) {
 func syncRealmClients(kcClient *gocloak.GoCloak, ctx context.Context, token *gocloak.JWT, realm *string, authenticator *model.Authenticator) {
 	thisClientId := utils.ClientId
 
-	// Todo: master service account 无法获取其他realm下的client
 	clients, err := (*kcClient).GetClients(ctx, token.AccessToken, *realm,
 		gocloak.GetClientsParams{ClientID: &thisClientId, First: &authenticator.SyncClients.PageParam.First,
 			Max: &authenticator.SyncClients.PageParam.Max})

@@ -7,9 +7,10 @@ const (
 	Oauth2Token      = "oauth2Token"
 	Oauth2RawIdToken = "rawIdToken"
 
-	CookieRealmParam = "realm"
-	CookieStateParam = "state"
-	CookieNonceParam = "nonce"
+	CookieSessionName = "SSO-PROXY"
+	CookieRealmParam  = "realm"
+	CookieStateParam  = "state"
+	CookieNonceParam  = "nonce"
 )
 
 const (

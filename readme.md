@@ -2,6 +2,8 @@
 ## Architecture
 ![Architecture](docs/architecture.png)
 
+## 类似的开源项目
+https://github.com/oauth2-proxy/oauth2-proxy
 
 ## API
 - /auth/
@@ -23,16 +25,16 @@ go build -ldflags="-s -w" -o sso-proxy cmd/sso-proxy.go
 + 编译其他环境可执行包
 ```shell
 # linux
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build cmd/sso-proxy.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/ cmd/sso-proxy.go
 
 # linux arm
-CGO_ENABLED=0 GOOS=linux GOARCH=arm go build cmd/sso-proxy.go
+CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o dist/ cmd/sso-proxy.go
 
 # Mac
-CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build cmd/sso-proxy.go
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o dist/ cmd/sso-proxy.go
 
 # Windows
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build move-repository.go
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dist/ cmd/sso-proxy.go
 
 ```
 

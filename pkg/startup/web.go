@@ -9,7 +9,6 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/memstore"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
 	"sso-proxy/pkg/handler"
@@ -23,7 +22,6 @@ func InitWebEndpoints() *gin.Engine {
 	registerGobType()
 	store := memstore.NewStore([]byte("secret"))
 
-	// store := cookie.NewStore([]byte("secret"))
 	store.Options(sessions.Options{
 		Path:     "/",
 		MaxAge:   utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge,
@@ -31,17 +29,12 @@ func InitWebEndpoints() *gin.Engine {
 		HttpOnly: true,
 	})
 
+	gin.SetMode(gin.ReleaseMode)
 	var engine = gin.Default()
-	engine.Use(sessions.Sessions("SSO-PROXY", store))
+	engine.Use(sessions.Sessions(utils.CookieSessionName, store))
 	engine.Use(middleware.ValidateSession(),
 		middleware.GinLogger(),
 		middleware.GinRecovery(utils.GetConfig().SsoProxyConfig.EnableDevFeatures))
-	gin.SetMode(gin.ReleaseMode)
-
-	engine.GET("/public/test", func(c *gin.Context) {
-		header := c.GetHeader(utils.HeaderAuthorization)
-		utils.Log().Info(utils.HeaderAuthorization, zap.String("header", header))
-	})
 
 	engine.GET("/auth", handler.HandleAuthCode)
 
@@ -50,9 +43,6 @@ func InitWebEndpoints() *gin.Engine {
 
 	engine.GET("/auth/userinfo", handler.GetUserInfo)
 	engine.GET("/auth/logout", handler.Logout)
-
-	// 该服务内部提供的功能接口
-	engine.GET("/internal/clients", handler.GetAllClients)
 
 	// 需要代理的请求
 	proxyUri := strings.TrimRight(utils.GetConfig().SsoProxyConfig.ReverseProxy.UrlPrefix, utils.UrlSeparator)
