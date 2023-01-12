@@ -37,10 +37,11 @@ func ValidateSession() gin.HandlerFunc {
 		// session中没有token(视为refresh_token失效时间到达),跳转登录页面
 		if oauth2Token == nil {
 			if utils.IsRestApi(uri) {
-				utils.Log().Debug("invalid session for calling rest api", zap.String("uri", uri))
+				//存在一种场景： 当session超时，但是token未超时，重新登录时，IAM上不需要输入用户名、密码即可登入
+				utils.Log().Debug("session not found for calling rest api", zap.String("uri", uri))
 				c.AbortWithStatus(http.StatusUnauthorized)
 			} else {
-				utils.Log().Debug("invalid session for non-rest api and just redirect to login page", zap.String("uri", uri))
+				utils.Log().Debug("session not found for non-rest api and just redirect to login page", zap.String("uri", uri))
 				utils.RedirectLogin(c)
 			}
 			return
@@ -54,7 +55,7 @@ func ValidateSession() gin.HandlerFunc {
 		// The refresh token lifetime is controlled by the SSO Session Idle Setting. 30 minutes = 30 * 60 = 1800 seconds (the refresh_expires_in value)
 		// session不过期(视为没有到达refresh token expiry time)，但是token过期
 		if !rawToken.Valid() {
-			utils.Log().Warn("access token is expired, trying to refresh later", zap.String("uri", uri))
+			utils.Log().Debug("access token is expired, trying to refresh later", zap.String("uri", uri))
 			oldRefreshToken := rawToken.RefreshToken
 			if err := utils.RemoveFromSession(c, utils.Oauth2Token, true); err != nil {
 				utils.Log().Error("Failed to remove old token from session", zap.Error(err), zap.String("uri", uri))
@@ -64,7 +65,7 @@ func ValidateSession() gin.HandlerFunc {
 			ts := authCfg.Oauth2Config.TokenSource(context.Background(), &oauth2.Token{RefreshToken: oldRefreshToken})
 			rawToken, err := ts.Token()
 			if err != nil {
-				utils.Log().Info("No token retrieved while the refresh token may expired", zap.Error(err), zap.String(utils.RealmParam, realm),
+				utils.Log().Debug("No token retrieved while the refresh token may expired", zap.Error(err), zap.String(utils.RealmParam, realm),
 					zap.String("uri", uri))
 				if utils.IsRestApi(uri) {
 					c.AbortWithStatus(http.StatusUnauthorized)
@@ -82,16 +83,39 @@ func ValidateSession() gin.HandlerFunc {
 			}
 		}
 
-		//https://blog.csdn.net/zhanghongxia8285/article/details/107321838
 		//将当前session会话时间向后延
-		if sessionCookie, err := c.Cookie(utils.CookieSessionName); err == nil {
-			maxAge := utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge
-			utils.SetCookie(c, utils.CookieSessionName, sessionCookie, maxAge)
-			utils.Log().Debug("updated the session expiry time while user activities detected", zap.String("uri", uri))
+		updateSessionExpireTime(session, c)
+
+		//如果session有效的清情况下，访问的是根路径则重定向到home首页
+		if uri == "/" {
+			utils.RedirectHome(c)
 		}
+
 		utils.Log().Debug("a valid request will be handled after session validation", zap.String("httpMethod", method),
 			zap.String("uri", uri))
 		c.Next()
+	}
+}
+
+func updateSessionExpireTime(session sessions.Session, c *gin.Context) {
+	//https: //github.com/gin-contrib/sessions/issues/68
+	//将当前session会话时间向后延
+	maxAge := utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge
+	session.Options(sessions.Options{
+		MaxAge: maxAge,
+	})
+	if err := session.Save(); err != nil {
+		utils.Log().Error("failed to save session", zap.Error(err))
+		return
+	}
+	utils.Log().Debug("update session timeout now", zap.Int("maxAge", maxAge))
+
+	//https://blog.csdn.net/zhanghongxia8285/article/details/107321838
+	//将当前session会话关联的cookie向后延
+	if sessionCookie, err := c.Cookie(utils.CookieSessionName); err == nil {
+		maxAge := utils.GetConfig().SsoProxyConfig.SessionSetting.MaxAge
+		utils.SetCookie(c, utils.CookieSessionName, sessionCookie, maxAge)
+		utils.Log().Debug("updated maxAge of session related cookie", zap.Int("maxAge", maxAge))
 	}
 }
 

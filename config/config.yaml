@@ -2,7 +2,7 @@ sso-proxy:
   port: 9900
   bindAddress: 0.0.0.0
   sessionSetting:
-    maxAge: 1800  # session的默认超时时间，单位秒
+    maxAge: 60  # session的默认超时时间，单位秒
   iamBaseUrl: http://localhost:8080 # 对接的IAM，base URL
   oidcAuthCallbackUrl: http://localhost:9900/auth/callback # 申请token的回调地址，IAM会回调该地址再申请token
   globalPublicUris: # 不需要登录就可以调用的uri
@@ -74,7 +74,7 @@ sso-proxy:
 
   enableDevFeatures: false
   logSetting:
-    logLevel: INFO
+    logLevel: DEBUG
     logPath: /var/log/sso-proxy # 日志存放路径：${logPath}/${fileName}
     outputToConsole: true  # 是否同时将日志打印到控制台
     fileName: sso-proxy.log
