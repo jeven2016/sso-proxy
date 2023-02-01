@@ -22,7 +22,7 @@ func RandString(nByte int) (string, error) {
 }
 
 func GetApp() *model.App {
-	return &GetConfig().SsoProxyConfig.Apps[0]
+	return GetConfig().SsoProxyConfig.Apps[0]
 }
 
 func GetAuthenticator() *model.Authenticator {
@@ -31,8 +31,7 @@ func GetAuthenticator() *model.Authenticator {
 		panic("There should be any authenticators defined")
 	}
 	authenticator := authenticators[0]
-	authenticator.Url = constructProviderUrl(authenticator.Url)
-	return &authenticator
+	return authenticator
 }
 
 func RedirectLogin(c *gin.Context) {
@@ -67,12 +66,6 @@ func Exists(array []string, value string) bool {
 
 func GetRealm(session *sessions.Session) string {
 	return (*session).Get(RealmParam).(string)
-}
-
-// 将provider url中的变量替换成真正的地址
-func constructProviderUrl(providerUrl string) string {
-	return strings.ReplaceAll(providerUrl, VarIamBaseUrl, GetConfig().
-		SsoProxyConfig.IamBaseUrl)
 }
 
 func SetSession(ctx *gin.Context, key string, value any, saveImmediately bool) error {

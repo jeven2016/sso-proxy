@@ -28,7 +28,7 @@ func Proxy(c *gin.Context) {
 	var serviceRoute *model.Route
 	for _, route := range proxySetting.Routes {
 		if strings.EqualFold(serviceName, route.ServiceName) {
-			serviceRoute = &route
+			serviceRoute = route
 			break
 		}
 	}
@@ -42,7 +42,7 @@ func Proxy(c *gin.Context) {
 }
 
 // 向后端服务转发请求
-func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting model.ReverseProxy) {
+func forwardRequest(c *gin.Context, serviceRoute *model.Route, proxySetting *model.ReverseProxy) {
 	parsedUrl, err := url.Parse(serviceRoute.Url)
 	if err != nil {
 		utils.Log().Warn("invalid reverseProxy.routes.route.url", zap.String("url", serviceRoute.Url),
@@ -91,7 +91,7 @@ func updateRequest(req *http.Request, originDirector func(*http.Request), c *gin
 }
 
 //初始化http请求
-func initHttpTransport(proxySetting model.ReverseProxy) http.RoundTripper {
+func initHttpTransport(proxySetting *model.ReverseProxy) http.RoundTripper {
 	httpTransport := proxySetting.HttpTransport
 	var transport http.RoundTripper = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,

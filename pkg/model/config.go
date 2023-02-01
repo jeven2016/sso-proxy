@@ -1,8 +1,13 @@
 package model
 
+import (
+	"bytes"
+	"text/template"
+)
+
 // Config 统一配置
 type Config struct {
-	SsoProxyConfig SsoProxyConfig `mapstructure:"sso-proxy"`
+	SsoProxyConfig *SsoProxyConfig `mapstructure:"sso-proxy"`
 }
 
 // LogSetting 日志相关配置
@@ -23,19 +28,20 @@ type SessionSetting struct {
 
 // SsoProxyConfig SSO统一配置
 type SsoProxyConfig struct {
-	Port                int             `mapstructure:"port"`
-	BindAddress         string          `mapstructure:"bindAddress"`
-	SessionSetting      SessionSetting  `mapstructure:"sessionSetting"`
-	IamBaseUrl          string          `mapstructure:"iamBaseUrl"`
-	OidcAuthCallbackUrl string          `mapstructure:"oidcAuthCallbackUrl"`
-	GlobalPublicUris    []string        `mapstructure:"globalPublicUris"`
-	OidcScopes          []string        `mapstructure:"oidcScopes"`
-	OidcClients         []Client        `mapstructure:"oidcClients"`
-	EnableDevFeatures   bool            `mapstructure:"enableDevFeatures"`
-	Authenticators      []Authenticator `mapstructure:"authenticators"`
-	Apps                []App           `mapstructure:"apps"`
-	ReverseProxy        ReverseProxy    `mapstructure:"reverseProxy"`
-	LogSetting          LogSetting      `mapstructure:"logSetting"`
+	Port                int              `mapstructure:"port"`
+	BindAddress         string           `mapstructure:"bindAddress"`
+	SessionSetting      SessionSetting   `mapstructure:"sessionSetting"`
+	IamBaseUrl          string           `mapstructure:"iamBaseUrl"`
+	InternalIamBaseUrl  string           `mapstructure:"internalIamBaseUrl"`
+	OidcAuthCallbackUrl string           `mapstructure:"oidcAuthCallbackUrl"`
+	GlobalPublicUris    []string         `mapstructure:"globalPublicUris"`
+	OidcScopes          []string         `mapstructure:"oidcScopes"`
+	OidcClients         []*Client        `mapstructure:"oidcClients"`
+	EnableDevFeatures   bool             `mapstructure:"enableDevFeatures"`
+	Authenticators      []*Authenticator `mapstructure:"authenticators"`
+	Apps                []*App           `mapstructure:"apps"`
+	ReverseProxy        *ReverseProxy    `mapstructure:"reverseProxy"`
+	LogSetting          *LogSetting      `mapstructure:"logSetting"`
 }
 
 type PageParam struct {
@@ -56,18 +62,18 @@ type RegisterSetting struct {
 }
 
 type SyncClients struct {
-	EnabledOnStartup bool            `mapstructure:"enabledOnStartup"`
-	AutoRegister     bool            `mapstructure:"autoRegister"`
-	RegisterSetting  RegisterSetting `mapstructure:"registerSetting"`
-	PageParam        PageParam       `mapstructure:"pageParam"`
+	EnabledOnStartup bool             `mapstructure:"enabledOnStartup"`
+	AutoRegister     bool             `mapstructure:"autoRegister"`
+	RegisterSetting  *RegisterSetting `mapstructure:"registerSetting"`
+	PageParam        *PageParam       `mapstructure:"pageParam"`
 }
 
 // Authenticator 校验器, 当前只支持keycloak
 type Authenticator struct {
-	Type        string      `mapstructure:"type"`
-	Name        string      `mapstructure:"name"`
-	Url         string      `mapstructure:"url"`
-	SyncClients SyncClients `mapstructure:"syncClients"`
+	Type        string       `mapstructure:"type"`
+	Name        string       `mapstructure:"name"`
+	Url         string       `mapstructure:"url"`
+	SyncClients *SyncClients `mapstructure:"syncClients"`
 }
 
 // App 对接的应用
@@ -108,12 +114,72 @@ type HttpTransport struct {
 }
 
 type ReverseProxy struct {
-	UrlPrefix     string        `mapstructure:"urlPrefix"`
-	Routes        []Route       `mapstructure:"routes"`
-	HttpTransport HttpTransport `mapstructure:"httpTransport"`
+	UrlPrefix     string         `mapstructure:"urlPrefix"`
+	Routes        []*Route       `mapstructure:"routes"`
+	HttpTransport *HttpTransport `mapstructure:"httpTransport"`
 }
 
 // Validate 校验参数
 func (c *Config) Validate() error {
 	return nil
+}
+
+// Complete 加载完成后的处理
+func (c *Config) Complete() error {
+	var err error
+	proxyConfig := c.SsoProxyConfig
+
+	//url中如果存在template字符串则进行特殊处理
+	internalIamBaseUrl, err := parseTemplate(c.SsoProxyConfig.InternalIamBaseUrl, proxyConfig)
+	if err != nil {
+		return err
+	}
+	c.SsoProxyConfig.InternalIamBaseUrl = internalIamBaseUrl
+
+	for _, client := range c.SsoProxyConfig.OidcClients {
+		prefix, err := parseTemplate(client.ProviderUrlPrefix, proxyConfig)
+		if err != nil {
+			return err
+		}
+		client.ProviderUrlPrefix = prefix
+	}
+
+	for _, authenticator := range c.SsoProxyConfig.Authenticators {
+		authUrl, err := parseTemplate(authenticator.Url, proxyConfig)
+		if err != nil {
+			return err
+		}
+		authenticator.Url = authUrl
+	}
+
+	for _, route := range c.SsoProxyConfig.ReverseProxy.Routes {
+		routeUrl, err := parseTemplate(route.Url, proxyConfig)
+		if err != nil {
+			return err
+		}
+		route.Url = routeUrl
+	}
+
+	return nil
+}
+
+// ParseTemplate 如果值是template字符串，则解析后返回。 提供了一个value函数
+func parseTemplate(value string, cfg *SsoProxyConfig) (string, error) {
+	tmpl, err := template.New("urlTemplate").Funcs(template.FuncMap{
+		"value": func(baseUrl string, defaultUrl string) string {
+			if len(baseUrl) > 0 {
+				return baseUrl
+			}
+			return defaultUrl
+		},
+	}).Parse(value)
+	if err != nil {
+		return "", err
+	}
+	var tmpBytes bytes.Buffer
+	err = tmpl.Execute(&tmpBytes, cfg)
+	if err != nil {
+		return "", err
+	}
+	return tmpBytes.String(), nil
 }

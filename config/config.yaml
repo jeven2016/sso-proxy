@@ -2,8 +2,9 @@ sso-proxy:
   port: 9900
   bindAddress: 0.0.0.0
   sessionSetting:
-    maxAge: 60  # session的默认超时时间，单位秒
-  iamBaseUrl: http://localhost:8080 # 对接的IAM，base URL
+    maxAge: 1800  # session的默认超时时间，单位秒
+  iamBaseUrl: http://localhost:8080 #IAM外部SSO的base URL，浏览器SSO跳转时需要使用该URL
+  internalIamBaseUrl: http://192.168.159.129:8080 #内部访问的URL，在同步clients时需要从内部调用。如果不设置，则使用iamBaseUrl
   oidcAuthCallbackUrl: http://localhost:9900/auth/callback # 申请token的回调地址，IAM会回调该地址再申请token
   globalPublicUris: # 不需要登录就可以调用的uri
     - "/auth"
@@ -18,12 +19,13 @@ sso-proxy:
     - realm: master # 在IAM上master realm下注册的client，并启用Service Account。以便进行client的自注册
       clientId: sso-proxy  # client created in master realm and has service account enabled
       secret: eUGbBI99r9P3kg8bIVcykq7YMnU741JG
-      providerUrlPrefix: ${iamBaseUrl}/realms/master
+      providerUrlPrefix: "{{ value .InternalIamBaseUrl .IamBaseUrl }}/realms/master" #如果internalIamBaseUrl不为空则使用，否则使用iamBaseUrl
 
   authenticators:
+    #当前只支持一个keycloak，如果需要添加其他类型的，记得修改common.GetAuthenticator()逻辑
     - type: keycloak
       name: keycloak-authenticator
-      url: ${iamBaseUrl}
+      url: "{{ value .InternalIamBaseUrl .IamBaseUrl }}"  #内部访问的URL，在同步clients时需要从内部调用。如果不设置，则使用{iamBaseUrl}
       syncClients:
         enabledOnStartup: true
         autoRegister: true # 如果realm下没有sso-proxy,自动注册
@@ -65,11 +67,11 @@ sso-proxy:
     routes:
       # 请求路径: /proxy/iam/**, 格式：${reverseProxy.urlPrefix}/${routes.serviceName}
       - serviceName: iam
-        url: http://192.168.159.129:8080/ # the url of backend service
+        url: "{{ .InternalIamBaseUrl }}" # the url of backend service
         publicUris: # 未经登录就可以调用的uri
           - "**/realms/**/departments-resource/**"
         filters: # filter用于过滤request或response,进行一些特殊处理
-          - SetHeader: Host=localhost:8080, X-Forwarded-Host=localhost:8080  # 转发的请求需要添加请求头， keycloak有LB部署的情况下读取X-Forwarded-Host，非LB的情况下读取Host
+          - SetHeader: Host=localhost:8080, X-Forwarded-Host=localhost:8080, X-Forwarded-Proto=http # 转发的请求需要添加请求头， keycloak有LB部署的情况下读取X-Forwarded-Host，非LB的情况下读取Host
           - SetBearerToken: Bearer=iam.accessToken # 转发的请求携带IAM的access token. iam.accessToken or openstack.accessToken
 
   enableDevFeatures: false

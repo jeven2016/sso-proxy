@@ -81,6 +81,16 @@ func start(cmd *cobra.Command) {
 	if err == nil {
 		cfg := utils.GetConfig()
 
+		if err = cfg.Validate(); err != nil {
+			printCmdErr(err)
+			return
+		}
+
+		if err = cfg.Complete(); err != nil {
+			printCmdErr(err)
+			return
+		}
+
 		// 初始化Log
 		utils.SetupLog(utils.GetConfig())
 

@@ -39,13 +39,13 @@ func GetByRealm(realm string) *model.AuthConfig {
 		var client *model.Client
 		for _, c := range oidcClients {
 			if c.Realm == realm {
-				client = &c
+				client = c
 				break
 			}
 		}
 
 		if client != nil {
-			provider, err := oidc.NewProvider(context.Background(), constructProviderUrl(client.ProviderUrlPrefix))
+			provider, err := oidc.NewProvider(context.Background(), client.ProviderUrlPrefix)
 			if err != nil {
 				Log().Error("Failed to initialize oidc client", zap.Error(err))
 				return nil

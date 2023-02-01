@@ -16,6 +16,11 @@ import (
 
 func SyncClients() {
 	authenticator := utils.GetAuthenticator()
+	if authenticator == nil {
+		utils.Log().Fatal("No valid authenticator configured")
+		return
+	}
+
 	if !authenticator.SyncClients.EnabledOnStartup {
 		utils.Log().Info("client sync is ignored")
 		return
@@ -49,6 +54,11 @@ func SyncClients() {
 	}
 
 	for _, realmRepresentation := range results {
+		//将master realm排除，因为master realm下的sso-proxy client需要预先手动创建
+		if *realmRepresentation.Realm == utils.IamMasterRealm {
+			continue
+		}
+
 		// 获取realm下sso-proxy的client配置
 		syncRealmClients(masterClient, context.Background(),
 			token, realmRepresentation.Realm, authenticator)
@@ -84,6 +94,7 @@ func logInitError(masterClientCfg *model.Client, err error) {
 
 func syncRealmClients(kcClient *gocloak.GoCloak, ctx context.Context, token *gocloak.JWT, realm *string, authenticator *model.Authenticator) {
 	thisClientId := utils.ClientId
+	ssoProxyConfig := utils.GetConfig().SsoProxyConfig
 
 	clients, err := (*kcClient).GetClients(ctx, token.AccessToken, *realm,
 		gocloak.GetClientsParams{ClientID: &thisClientId, First: &authenticator.SyncClients.PageParam.First,
@@ -114,10 +125,17 @@ func syncRealmClients(kcClient *gocloak.GoCloak, ctx context.Context, token *goc
 		// keycloak issuer url: http://localhost:8080/realms/jeven/protocol/openid-connect
 		// oidc provider url前缀：http://localhost:8080/realms/jeven
 		issuerUrl := *issuer.TokenService
+
 		excludeUriPartIndex := strings.Index(issuerUrl, utils.IssueProviderUri)
 		providerUrlPrefix := issuerUrl[:excludeUriPartIndex]
 
-		oidcClient := model.Client{
+		//除了master下的client， 其他realm下的client都使用对外的IAM issue URL， 而且该client只能用于SSO登录验证
+		if ssoProxyConfig.InternalIamBaseUrl != ssoProxyConfig.IamBaseUrl {
+			providerUrlPrefix = strings.ReplaceAll(providerUrlPrefix, ssoProxyConfig.InternalIamBaseUrl, ssoProxyConfig.IamBaseUrl)
+		}
+		utils.Log().Info("The issue url of realm for SSO", zap.String("realm", *realm), zap.String("issue", providerUrlPrefix))
+
+		oidcClient := &model.Client{
 			Realm:             *realm,
 			ClientId:          *client.ClientID,
 			Secret:            *client.Secret,
@@ -145,7 +163,7 @@ func hasOverlap(realm *string) bool {
 	return false
 }
 
-func appendOidcClient(oidcClient model.Client) {
+func appendOidcClient(oidcClient *model.Client) {
 	utils.GetConfig().SsoProxyConfig.OidcClients = append(utils.GetConfig().SsoProxyConfig.OidcClients, oidcClient)
 }
 
@@ -192,7 +210,7 @@ func registerNewClient(kcClient *gocloak.GoCloak, authenticator *model.Authentic
 		providerUrlPrefix := strings.TrimRight(authenticator.Url, utils.UrlSeparator) +
 			utils.UrlSeparator + "realms/" + *realm
 
-		oidcClient := model.Client{
+		oidcClient := &model.Client{
 			Realm:             *realm,
 			ClientId:          registerSetting.ClientId,
 			Secret:            registerSetting.Secret,
